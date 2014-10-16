@@ -5,3 +5,5 @@ stops.txt
 *.log
 *.pyc
 *.cfg
+*.o
+*.a

@@ -1,4 +1,4 @@
-import mta_realtime, json, os
+import mta_realtime, json, os, time
 from datetime import datetime
 
 
@@ -29,3 +29,6 @@ delta = feed[0]["N"][0]["time"].replace(tzinfo=None) - datetime.now()
 minutes_until_next_train = int(delta.total_seconds() / 60) % 60
 
 print "{min} min".format(min=minutes_until_next_train)
+
+while True:
+	time.sleep(5)	
