@@ -37,10 +37,11 @@ static bool parseColor(Color *c, const char *str) {
 int main(int argc, char *argv[]) {
   Color color(255, 255, 0);
   const char *bdf_font_file = NULL;
+  const char *bdf_font_file_large = NULL;
   int rows = 32;
   int chain = 1;
   int x_orig = 0;
-  int y_orig = -1;
+  int y_orig = 0;
 
   int opt;
   while ((opt = getopt(argc, argv, "r:c:x:y:f:C:")) != -1) {
@@ -50,6 +51,7 @@ int main(int argc, char *argv[]) {
     case 'x': x_orig = atoi(optarg); break;
     case 'y': y_orig = atoi(optarg); break;
     case 'f': bdf_font_file = strdup(optarg); break;
+    case 'l': bdf_font_file_large = strdup(optarg); break; 
     case 'C':
       if (!parseColor(&color, optarg)) {
         fprintf(stderr, "Invalid color spec.\n");
@@ -64,14 +66,26 @@ int main(int argc, char *argv[]) {
     return usage(argv[0]);
   }
 
+  if (bdf_font_file_large == NULL) {
+    fprintf(stderr, "Need to specify large BDF font-file with -l\n");
+    return usage(argv[0]);
+  }
+
   /*
    * Load font. This needs to be a filename with a bdf bitmap font.
    */
   rgb_matrix::Font font;
+  rgb_matrix::Font large_font;
+
   if (!font.LoadFont(bdf_font_file)) {
     fprintf(stderr, "Couldn't load font '%s'\n", bdf_font_file);
     return usage(argv[0]);
   }
+  if (!large_font.LoadFont(bdf_font_file_large)) {
+    fprintf(stderr, "Couldn't load font '%s'\n", bdf_font_file_large);
+    return usage(argv[0]);
+  }
+
 
   /*
    * Set up GPIO pins. This fails when not running as root.
@@ -112,7 +126,7 @@ int main(int argc, char *argv[]) {
     }
     if (line_empty)
       continue;
-    canvas->Fill(255, 0, 0);
+    //canvas->Fill(255, 0, 0);
     rgb_matrix::DrawText(canvas, font, x, y + font.baseline(), color, line);
     y += font.height();
   }
