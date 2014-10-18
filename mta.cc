@@ -6,6 +6,7 @@
 
 #include "led-matrix.h"
 #include "graphics.h"
+#include "threaded-canvas-manipulator.h"
 
 #include <getopt.h>
 #include <stdio.h>
@@ -15,75 +16,59 @@
 
 using namespace rgb_matrix;
 
-static int usage(const char *progname) {
-  fprintf(stderr, "usage: %s [options]\n", progname);
-  fprintf(stderr, "Reads text from stdin and displays it. "
-          "Empty string: clear screen\n");
-  fprintf(stderr, "Options:\n"
-          "\t-f <font-file>: Use given font.\n"
-          "\t-r <rows>     : Display rows. 16 for 16x32, 32 for 32x32. "
-          "Default: 32\n"
-          "\t-c <chained>  : Daisy-chained boards. Default: 1.\n"
-          "\t-x <x-origin> : X-Origin of displaying text (Default: 0)\n"
-          "\t-y <y-origin> : Y-Origin of displaying text (Default: 0)\n"
-          "\t-C <r,g,b>    : Color. Default 255,255,0\n");
-  return 1;
-}
-
-static bool parseColor(Color *c, const char *str) {
-  return sscanf(str, "%hhu,%hhu,%hhu", &c->r, &c->g, &c->b) == 3;
-}
+// Simple generator that pulses through RGB and White.
+class ColorPulseGenerator : public ThreadedCanvasManipulator {
+public:
+  ColorPulseGenerator(Canvas *m) : ThreadedCanvasManipulator(m) {}
+  void Run() {
+    uint32_t continuum = 0;
+    while (running()) {
+      usleep(5 * 1000);
+      continuum += 1;
+      continuum %= 3 * 255;
+      int r = 0, g = 0, b = 0;
+      if (continuum <= 255) {
+        int c = continuum;
+        b = 255 - c;
+        r = c;
+      } else if (continuum > 255 && continuum <= 511) {
+        int c = continuum - 256;
+        r = 255 - c;
+        g = c;
+      } else {
+        int c = continuum - 512;
+        g = 255 - c;
+        b = c;
+      }
+      canvas()->Fill(r, g, b);
+    }
+  }
+};
 
 int main(int argc, char *argv[]) {
-  Color color(255, 255, 0);
-  const char *bdf_font_file = NULL;
-  const char *bdf_font_file_large = NULL;
+  Color color(255, 255, 255);
+  Color color_mn(237, 201, 81);
+  Color color_bk(0, 160, 176);
+  const char *bdf_font_file = "matrix/fonts/4x6.bdf";
+  const char *bdf_font_file_large = "matrix/fonts/7x13O.bdf";
   int rows = 32;
   int chain = 1;
   int x_orig = 0;
   int y_orig = 0;
 
-  int opt;
-  while ((opt = getopt(argc, argv, "r:c:x:y:f:C:")) != -1) {
-    switch (opt) {
-    case 'r': rows = atoi(optarg); break;
-    case 'c': chain = atoi(optarg); break;
-    case 'x': x_orig = atoi(optarg); break;
-    case 'y': y_orig = atoi(optarg); break;
-    case 'f': bdf_font_file = strdup(optarg); break;
-    case 'l': bdf_font_file_large = strdup(optarg); break; 
-    case 'C':
-      if (!parseColor(&color, optarg)) {
-        fprintf(stderr, "Invalid color spec.\n");
-        return usage(argv[0]);
-      }
-      break;
-    }
-  }
-
-  if (bdf_font_file == NULL) {
-    fprintf(stderr, "Need to specify BDF font-file with -f\n");
-    return usage(argv[0]);
-  }
-
-  if (bdf_font_file_large == NULL) {
-    fprintf(stderr, "Need to specify large BDF font-file with -l\n");
-    return usage(argv[0]);
-  }
-
   /*
    * Load font. This needs to be a filename with a bdf bitmap font.
    */
-  rgb_matrix::Font font;
-  rgb_matrix::Font large_font;
+  Font font;
+  Font large_font;
 
   if (!font.LoadFont(bdf_font_file)) {
     fprintf(stderr, "Couldn't load font '%s'\n", bdf_font_file);
-    return usage(argv[0]);
+    return 1;
   }
   if (!large_font.LoadFont(bdf_font_file_large)) {
     fprintf(stderr, "Couldn't load font '%s'\n", bdf_font_file_large);
-    return usage(argv[0]);
+    return 1;
   }
 
 
@@ -99,13 +84,14 @@ int main(int argc, char *argv[]) {
    */
   RGBMatrix *canvas = new RGBMatrix(&io, rows, chain);
 
+/*
   bool all_extreme_colors = true;
   all_extreme_colors &= color.r == 0 || color.r == 255;
   all_extreme_colors &= color.g == 0 || color.g == 255;
   all_extreme_colors &= color.b == 0 || color.b == 255;
   if (all_extreme_colors)
     canvas->SetPWMBits(1);
-
+*/
   const int x = x_orig;
   int y = y_orig;
 
@@ -117,18 +103,30 @@ int main(int argc, char *argv[]) {
 
   char line[1024];
   while (fgets(line, sizeof(line), stdin)) {
-    const size_t last = strlen(line);
-    if (last > 0) line[last - 1] = '\0';  // remove newline.
-    bool line_empty = strlen(line) == 0;
-    if ((y + font.height() > canvas->height()) || line_empty) {
+    //if subway view
+   if(strncmp(line, "[subway]", 8) == 0) {
+      const size_t last = strlen(line);
+      if (last > 0) line[last - 1] = '\0';  // remove newline.
+      bool line_empty = strlen(line) == 0;
       canvas->Clear();
       y = y_orig;
+      if (line_empty)
+        continue;
+      int north, south;
+      sscanf(line, "[subway]%d,%d", &north, &south);
+      char str_north[10];
+      char str_south[10];
+      sprintf(str_north, "%d", north);
+      sprintf(str_south, "%d", south);
+      DrawText(canvas, large_font, 1, y + large_font.baseline(), color, str_north);
+      y += large_font.height();
+      DrawText(canvas, font, 1, y + font.baseline() - 2, color_mn, "min");
+      DrawText(canvas, large_font, 17, y + large_font.baseline(), color, str_south);
+      y += large_font.height();
+      DrawText(canvas, font, 17, y + font.baseline() - 2, color_bk, "min");
+      DrawText(canvas, large_font, 17, large_font.baseline(), color_mn, "MN");
+      DrawText(canvas, large_font, 1, large_font.baseline() * 2 + 7, color_bk, "BK");
     }
-    if (line_empty)
-      continue;
-    //canvas->Fill(255, 0, 0);
-    rgb_matrix::DrawText(canvas, font, x, y + font.baseline(), color, line);
-    y += font.height();
   }
 
   // Finished. Shut down the RGB matrix.

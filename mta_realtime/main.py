@@ -31,7 +31,8 @@ while True:
 	mn_next_min = int(mn_bound.total_seconds() / 60) % 60
 	bk_next_min = int(bk_bound.total_seconds() / 60) % 60
 
-	print "MNHTN\n{min} min".format(min=mn_next_min)
-	print "BKLYN\n{min} min".format(min=bk_next_min)
+	#print "MNHTN\n{min} min".format(min=mn_next_min)
+	#print "BKLYN\n{min} min".format(min=bk_next_min)
 
+	print "[subway]{mn_min},{bk_min}".format(mn_min=mn_next_min, bk_min=bk_next_min)
 	time.sleep(30)	
